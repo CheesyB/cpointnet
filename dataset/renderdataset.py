@@ -43,4 +43,12 @@ def render_dataset(file_path,save_path):
 
 
 if __name__ == "__main__":
-    render_dataset('data/new_dataset.hd5f','data/')
+    render_dataset('../../pcgen/data/hdf5/tescht.hd5f','data/delete/')
+
+
+
+
+
+
+
+

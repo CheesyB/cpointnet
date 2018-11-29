@@ -43,7 +43,7 @@ if __name__ == "__main__":
     batch_size = 20
     eval_dataset = SceneDataset('dataset/data/evaldataset.hd5f',2500)
     eval_dataloader = torch.utils.data.DataLoader(eval_dataset, batch_size=batch_size,
-                                              shuffle=False, num_workers=0)
+                                              shuffle=True, num_workers=0)
     logger.info('length dataset: {}\n'
             'length training set: {}'.format(len(eval_dataset),len(eval_dataset)))
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     """ setup net and load trained weights """
     classifier = PointNetDenseCls(k = num_classes)
-    classifier.load_state_dict(torch.load('seg/seg_model_99.pth'))
+    classifier.load_state_dict(torch.load('seg/seg_model_30.pth'))
     classifier.cuda()
     optimizer = optim.SGD(classifier.parameters(), lr=0.01, momentum=0.9)
 
@@ -86,8 +86,12 @@ if __name__ == "__main__":
         
         """ reshape until comparison is easy and render"""
         pred_choice = pred.data.max(1)[1]
-        np_pred_choise = pred_choice.cpu().detach().numpy()
-        utils.render_batch(np.array(data[0]),np_pred_choise,folder_path)
+        np_pred_choice = pred_choice.cpu().detach().numpy()
+        np_points = data[0].cpu().detach().numpy()
+        np_target = data[1].cpu().detach().numpy()
+        utils.render_batch(np_points,np_pred_choice,folder_path)
+        utils.render_batch_bool(np_points,np_pred_choice,np_target,folder_path)
+        
         
         correct = pred_choice.eq(target.data).cpu().sum()
         accuracy = correct.item()/float(batch_size * 2500)
