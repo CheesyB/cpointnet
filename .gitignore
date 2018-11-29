@@ -1,4 +1,6 @@
 .ipynb_checkpoints/
+out/
+tflog/
 data
 *.pyc
 *.ipynb

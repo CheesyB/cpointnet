@@ -9,10 +9,28 @@ from pcgen.util import utils
 
 
 
+""" This function assumes a hdf5 dataset from pcgen with the 
+    following structure:
+    /-scene0
+        |--> ds: 'cloud' (complete scene)
+        |--> ds: 'slice0' 
+        |--> ds: 'slice1' 
+        |--> ds: 'slice2' 
+        | ...
+        |--> ds: 'slicen' 
+      -scene1
+        |--> ds: 'cloud' (complete scene)
+        |--> ds: 'slice0' 
+        |--> ds: 'slice1' 
+        |--> ds: 'slice2' 
+        | ...
+        |--> ds: 'slicen' 
+        ...
+      -scenen
+      and only writes the datasets from the first group """
 
 
 def render_dataset(file_path,save_path):
-
     dataset = h5py.File(file_path,'r')
     grp = dataset['scene0']
     slices = []

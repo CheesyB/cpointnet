@@ -22,14 +22,15 @@ from dataset.scenedataset import SceneDataset
 from pointnet import PointNetDenseCls
 import torch.nn.functional as F
 from pcgen.util import tictoc
+from  logger import Logger 
 
 
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batchSize', type=int, default=10, help='input batch size')
+    parser.add_argument('--batchSize', type=int, default=20, help='input batch size')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=0)
-    parser.add_argument('--nepoch', type=int, default=25, help='number of epochs to train for')
+    parser.add_argument('--nepoch', type=int, default=250, help='number of epochs to train for')
     parser.add_argument('--outf', type=str, default='seg',  help='output folder')
     parser.add_argument('--model', type=str, default = '',  help='model path') 
     
@@ -47,11 +48,11 @@ if __name__ == "__main__":
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
 
-    dataset = SceneDataset('dataset/data/new_dataset.hd5f',100,2500)
+    dataset = SceneDataset('dataset/data/dataset100.hd5f',2500)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
                                               shuffle=False, num_workers=int(opt.workers))
 
-    test_dataset = SceneDataset('dataset/data/new_dataset.hd5f',100,2500)
+    test_dataset = SceneDataset('dataset/data/testdataset.hd5f',2500)
     testdataloader = torch.utils.data.DataLoader(test_dataset, batch_size=opt.batchSize,
                                               shuffle=False, num_workers=int(opt.workers))
 
@@ -80,7 +81,8 @@ if __name__ == "__main__":
     classifier.cuda()
 
     num_batch = int(len(dataset)/opt.batchSize)
-
+    
+    tf_logger = Logger('./tflog')
     tick = time.time()
     for epoch in range(opt.nepoch):
         for idx, data in enumerate(dataloader, 0):
@@ -90,23 +92,26 @@ if __name__ == "__main__":
             points, target = points.cuda(), target.cuda()   
             optimizer.zero_grad()
             classifier = classifier.train()
-            #print(str(points),str(target))
             pred, _ = classifier(points)
             pred = pred.view(-1, num_classes)
             target = target.view(-1,1)[:,0] - 1
-            #print(pred.size(), target.size())
             loss = F.nll_loss(pred, target)
             loss.backward()
             optimizer.step()
             pred_choice = pred.data.max(1)[1]
             correct = pred_choice.eq(target.data).cpu().sum()
-            logger.info('[{}: {}/{}] train loss: {:f} accuracy: {}'.format(epoch, idx, 
-                num_batch, loss.item(), correct.item()/float(opt.batchSize * 2500)))
+            accuracy = correct.item()/float(opt.batchSize * 2500)
+            info = { 'train_loss': loss.item(), 'train_accuracy': accuracy }
+            for tag, value in info.items():
+                tf_logger.scalar_summary(tag, value, (epoch*num_batch)+(idx+1))
+            
+            logger.info('[{}: {}/{}] train loss: {:2.3f} accuracy: {:2.3f}'.format(epoch, idx, 
+                num_batch, loss.item(),accuracy))
             
             if idx % 10 == 0:
                 tack = time.time() - tick
                 tick = time.time()
-                j, data = next(enumerate(testdataloader, 0))
+                _,data = next(enumerate(testdataloader, 0))
                 points, target = data
                 points, target = Variable(points), Variable(target)
                 points = points.transpose(2,1) 
@@ -120,16 +125,32 @@ if __name__ == "__main__":
                 loss = F.nll_loss(pred, target)
                 pred_choice = pred.data.max(1)[1]
                 correct = pred_choice.eq(target.data).cpu().sum()
-                logger.info('[{}: {}/{}] {} loss: {} accuracy: {}'.format(epoch, idx, 
-                    num_batch, blue('test'), loss.item(), 
-                    correct.item()/float(opt.batchSize * 2500)))
-                logger.info('	Duration test: {0:.2f} |'
+                accuracy = correct.item()/float(opt.batchSize * 2500)
+
+                info = { 'test_loss': loss.item(), 'test_accuracy': accuracy }
+                for tag, value in info.items():
+                    tf_logger.scalar_summary(tag, value, (epoch*num_batch)+(idx+1))
+                
+                logger.info('[{}: {}/{}] {} loss: {:2.3f} accuracy: {:2.3f}'.format(epoch, idx, 
+                    num_batch, blue('test'), loss.item(),accuracy))
+                time_logger.info('Duration test: {0:.2f} |'
                         ' aprox. time left: {1}'.format(tack,
                             str(datetime.timedelta(seconds=int(tack*((opt.nepoch-epoch)\
                                 *num_batch/10-idx/10))))))
         
         torch.save(classifier.state_dict(), '{}/seg_model_{}.pth'.format(opt.outf, epoch))
 
+        
+#        for tag, value in model.named_parameters():
+#            tag = tag.replace('.', '/')
+#            logger.histo_summary(tag, value.data.cpu().numpy(), step+1)
+#            logger.histo_summary(tag+'/grad', value.grad.data.cpu().numpy(), step+1)
+#
+#        # 3. Log training images (image summary)
+#        info = { 'images': images.view(-1, 28, 28)[:10].cpu().numpy() }
+#
+#        for tag, images in info.items():
+#        logger.image_summary(tag, images, step+1)
 
 
 #torch.Size([32, 3, 2500])
