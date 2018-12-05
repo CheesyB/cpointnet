@@ -48,20 +48,20 @@ if __name__ == "__main__":
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
 
-    dataset = SceneDataset('dataset/data/dataset100.hd5f',2500)
+    dataset = SceneDataset('dataset/data/current/data_set50.hd5f',2500)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
                                               shuffle=False, num_workers=int(opt.workers))
 
-    test_dataset = SceneDataset('dataset/data/testdataset.hd5f',2500)
+    test_dataset = SceneDataset('dataset/data/current/test_set250.hd5f',2500)
     testdataloader = torch.utils.data.DataLoader(test_dataset, batch_size=opt.batchSize,
                                               shuffle=False, num_workers=int(opt.workers))
 
 
-    logger.info('length dataset: {}\n'
-            'length training set: {}'.format(len(dataset),len(test_dataset)))
+    logger.info('length training set: {} '
+            'length test set: {}'.format(len(dataset),len(test_dataset)))
 
     #num_classes = len(dataset.named_classe)
-    num_classes = 8
+    num_classes = 11 
     logger.info('We are looking for {} classes'.format(num_classes))
 
     try:
@@ -85,7 +85,8 @@ if __name__ == "__main__":
     tf_logger = Logger('./tflog')
     tick = time.time()
     for epoch in range(opt.nepoch):
-        for idx, data in enumerate(dataloader, 0):
+        #for idx, data in enumerate(dataloader, 0):
+        for idx, data in enumerate(dataset):
             points, target = data
             points, target = Variable(points), Variable(target)
             points = points.transpose(2,1) 

@@ -13,6 +13,8 @@ import torch
 import os
 import os.path
 import logging
+        
+import ipdb
 
 
 
@@ -34,7 +36,8 @@ class SceneDataset(data.Dataset):
         length = 0
         for grp_name in self._raw_dataset:
             grp = self._raw_dataset[grp_name]
-            length += grp.attrs['scenes'] - 1
+            #ipdb.set_trace()
+            length += grp.attrs['slices'] - 1
         return length
         
     
@@ -54,14 +57,18 @@ class SceneDataset(data.Dataset):
     def get_indices(self,index):
         scene_index = 0
         slice_index = 0
+        #ipdb.set_trace()
         for idx,grp_name in enumerate(self._scenes):
             grp = self._raw_dataset[grp_name] 
-            index -= grp.attrs['scenes']  - 1
+            index -= grp.attrs['slices']  - 1
+            print(str(grp_name))
+            print(str(grp))
+            print(index)
             if index <= 0:
                 slice_index = abs(index)
                 break
             scene_index += 1
-        #print(index,scene_index, slice_index )
+        print(index,scene_index, slice_index )
         return scene_index, slice_index 
              
 
