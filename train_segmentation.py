@@ -48,11 +48,11 @@ if __name__ == "__main__":
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
 
-    dataset = SceneDataset('dataset/data/current/data_set50.hd5f',2500)
+    dataset = SceneDataset('dataset/data/06-12_16:27_set/train_C11_S2.hd5f',2500)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
                                               shuffle=False, num_workers=int(opt.workers))
 
-    test_dataset = SceneDataset('dataset/data/current/test_set250.hd5f',2500)
+    test_dataset = SceneDataset('dataset/data/06-12_16:27_set/train_C11_S2.hd5f',2500)
     testdataloader = torch.utils.data.DataLoader(test_dataset, batch_size=opt.batchSize,
                                               shuffle=False, num_workers=int(opt.workers))
 
@@ -85,8 +85,7 @@ if __name__ == "__main__":
     tf_logger = Logger('./tflog')
     tick = time.time()
     for epoch in range(opt.nepoch):
-        #for idx, data in enumerate(dataloader, 0):
-        for idx, data in enumerate(dataset):
+        for idx, data in enumerate(dataloader, 0):
             points, target = data
             points, target = Variable(points), Variable(target)
             points = points.transpose(2,1) 
@@ -95,7 +94,7 @@ if __name__ == "__main__":
             classifier = classifier.train()
             pred, _ = classifier(points)
             pred = pred.view(-1, num_classes)
-            target = target.view(-1,1)[:,0] - 1
+            target = target.view(-1,1)[:,0] -1 #warum -1??????? (keine 0 als Label!!!)
             loss = F.nll_loss(pred, target)
             loss.backward()
             optimizer.step()
