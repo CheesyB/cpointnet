@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
+import glob
 import os 
 import numpy as np
 import random
@@ -19,19 +20,22 @@ from pcgen.util import utils # brauchen wir das?
 from  logger import Logger 
 
 
-if __name__ == "__main__":
+
+
     
+
+def eval_segmentation(folder_path,params):
     
     logging.basicConfig(level=logging.DEBUG)                                                        
     logger = logging.getLogger('eval.segmentation')
     logging.getLogger('pointnet.SceneDataset').setLevel(level=logging.CRITICAL)
 
     """ where to save the net predictions """
-    file_path = Path('out')
-    suffix = len(list(file_path.iterdir()))
-    os.mkdir(str(file_path) + '/pc_pred{}'.format(suffix))
-    folder_path = str(file_path) + '/pc_pred{}'.format(suffix)
-    logger.info('predicion output folder: {}'.format(folder_path))
+    now = datetime.datetime.now()
+    folder_path_eval = folder_path + '/eval_{}'.format(now.strftime('%d.%m_%H:%M'))
+    os.makedirs(folder_path_eval,exist_ok=True)
+    assert os.path.isdir(folder_path_eval) , 'folder path does not exist'
+    logger.info('predicion output folder: {}'.format(folder_path_eval))
     
     """ clean setup """ 
     torch.cuda.empty_cache()
@@ -41,27 +45,30 @@ if __name__ == "__main__":
 
     """ get dataset """
     batch_size = 20
-    eval_dataset = SceneDataset('dataset/data/evaldataset.hd5f',2500)
+    eval_dataset = SceneDataset(params['testset_path'],2500)
     eval_dataloader = torch.utils.data.DataLoader(eval_dataset, batch_size=batch_size,
-                                              shuffle=True, num_workers=0)
+                                              shuffle=False, num_workers=0)
     logger.info('length dataset: {}\n'
             'length training set: {}'.format(len(eval_dataset),len(eval_dataset)))
 
     """ pararmeter """ 
-    num_classes = 8
+    num_classes = params['number of classes']
     num_batch = int(len(eval_dataset)/batch_size)
-    num_batch = 1 # nur weil es noch kein datenset gibt
     logger.info('We are looking for {} classes'.format(num_classes))
 
 
-    """ setup net and load trained weights """
+    """ setup net and load trained weights 
+        search for the latest modified file which is the last model checkpoint """
+    list_of_files = glob.glob(params['folder_path_chekp'] + '/*')
+    latest_file = max(list_of_files, key=os.path.getctime)
     classifier = PointNetDenseCls(k = num_classes)
-    classifier.load_state_dict(torch.load('seg/seg_model_30.pth'))
+    classifier.load_state_dict(torch.load(latest_file))
     classifier.cuda()
+    
     optimizer = optim.SGD(classifier.parameters(), lr=0.01, momentum=0.9)
 
     """ tensorflow hack from stackoverflow """ 
-    tf_logger = Logger('./tflog')
+    tf_logger = Logger(params['folder_path_tflogs'])
     
     """ for one epoch, why should we go for more:) """
 
@@ -89,8 +96,10 @@ if __name__ == "__main__":
         np_pred_choice = pred_choice.cpu().detach().numpy()
         np_points = data[0].cpu().detach().numpy()
         np_target = data[1].cpu().detach().numpy()
-        utils.render_batch(np_points,np_pred_choice,folder_path)
-        utils.render_batch_bool(np_points,np_pred_choice,np_target,folder_path)
+        utils.render_batch(np_points,np_pred_choice,
+                folder_path_eval)
+        utils.render_batch_bool(np_points,np_pred_choice,np_target,
+                folder_path_eval)
         
         
         correct = pred_choice.eq(target.data).cpu().sum()
@@ -105,6 +114,14 @@ if __name__ == "__main__":
         logger.info('[{}: {}/{}] {} loss: {:2.3f} accuracy: {:2.3f}'.format(1, idx, 
             num_batch, 'test', loss.item(),accuracy))
 
+if __name__ == "__main__":
+    now = datetime.datetime.now()
+    folder_path = '/home/tbreu/workbench/cpointnet/out'
+    params = {'testset_path':'dataset/data/06-12_16:27_set/train_C11_S2.hd5f',
+            'folder_path_chekp':'/home/tbreu/workbench/cpointnet/seg/07.12_10:10_run/chekp',
+            'folder_path_tflogs':'/home/tbreu/workbench/cpointnet/seg/07.12_10:10_run/tflog',
+            'number of classes':11,}
+    eval_segmentation(folder_path,params)
         
 
 #tensorsizes out of the net...

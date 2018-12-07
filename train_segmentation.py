@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+import json
 import logging
 import os
 import random
@@ -19,6 +20,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 from torch.autograd import Variable
 from dataset.scenedataset import SceneDataset 
+from eval_segmentation import eval_segmentation
 from pointnet import PointNetDenseCls
 import torch.nn.functional as F
 from pcgen.util import tictoc
@@ -26,6 +28,7 @@ from  logger import Logger
 
 
 if __name__ == "__main__":
+    global_tic = time.time()
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--batchSize', type=int, default=20, help='input batch size')
@@ -42,34 +45,49 @@ if __name__ == "__main__":
     
     opt = parser.parse_args()
     opt.manualSeed = random.randint(1, 10000) # fix seed
+    
+    
+    now = datetime.datetime.now()
+    params ={'created':now.strftime('%d.%m.%y %H:%M'),'manual seed':opt.manualSeed,
+            'batch size':opt.batchSize,'epochs':opt.nepoch,'workers':opt.workers,
+            'cont. training':opt.model}
+
+    now = datetime.datetime.now()
+    folder_path = 'seg/{}_run'.format(now.strftime('%d.%m_%H:%M'))
+    params['folder_path'] = folder_path
+    os.makedirs(folder_path,exist_ok=True)
+    
+    folder_path_tflogs = folder_path + '/tflog'
+    params['folder_path_tflogs'] = folder_path_tflogs
+    os.makedirs(folder_path_tflogs,exist_ok=True)
+    
+    folder_path_chekp = folder_path + '/chekp'
+    params['folder_path_chekp'] = folder_path_chekp
+    os.makedirs(folder_path_chekp,exist_ok=True)
 
     logger.info('{}'.format(opt))
-
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
 
-    dataset = SceneDataset('dataset/data/06-12_16:27_set/train_C11_S2.hd5f',2500)
+    params['trainset_path'] = 'dataset/hdf5/06-12_16:27_set/train_C11_S2.hd5f'
+    dataset = SceneDataset(params['trainset_path'],2500)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
-                                              shuffle=False, num_workers=int(opt.workers))
-
-    test_dataset = SceneDataset('dataset/data/06-12_16:27_set/train_C11_S2.hd5f',2500)
+                                              shuffle=True, num_workers=int(opt.workers))
+    
+    params['testset_path'] = 'dataset/hdf5/06-12_16:27_set/train_C11_S2.hd5f'
+    test_dataset = SceneDataset(params['testset_path'],2500)
     testdataloader = torch.utils.data.DataLoader(test_dataset, batch_size=opt.batchSize,
-                                              shuffle=False, num_workers=int(opt.workers))
+                                              shuffle=True, num_workers=int(opt.workers))
 
-
+    params['len_dataset'] = len(dataset)
+    params['len_testset'] = len(test_dataset)
     logger.info('length training set: {} '
-            'length test set: {}'.format(len(dataset),len(test_dataset)))
+            'length test set: {}'.format(params['len_dataset'],params['len_testset']))
 
     #num_classes = len(dataset.named_classe)
     num_classes = 11 
+    params['number of classes'] = num_classes
     logger.info('We are looking for {} classes'.format(num_classes))
-
-    try:
-        os.makedirs(opt.outf)
-    except OSError:
-        pass
-
-    blue = lambda x:'\033[94m' + x + '\033[0m'
 
 
     classifier = PointNetDenseCls(k = num_classes)
@@ -77,12 +95,16 @@ if __name__ == "__main__":
     if opt.model != '':
         classifier.load_state_dict(torch.load(opt.model))
 
-    optimizer = optim.SGD(classifier.parameters(), lr=0.01, momentum=0.9)
+    params['learning rate'] = 0.01
+    params['momentum'] = 0.9
+    optimizer = optim.SGD(classifier.parameters(), 
+            lr=params['learning rate'], momentum =  params['momentum'] )
     classifier.cuda()
 
     num_batch = int(len(dataset)/opt.batchSize)
+    params['batches'] = num_batch
     
-    tf_logger = Logger('./tflog')
+    tf_logger = Logger(folder_path_tflogs)
     tick = time.time()
     for epoch in range(opt.nepoch):
         for idx, data in enumerate(dataloader, 0):
@@ -132,13 +154,19 @@ if __name__ == "__main__":
                     tf_logger.scalar_summary(tag, value, (epoch*num_batch)+(idx+1))
                 
                 logger.info('[{}: {}/{}] {} loss: {:2.3f} accuracy: {:2.3f}'.format(epoch, idx, 
-                    num_batch, blue('test'), loss.item(),accuracy))
+                    num_batch, 'test', loss.item(),accuracy))
                 time_logger.info('Duration test: {0:.2f} |'
                         ' aprox. time left: {1}'.format(tack,
                             str(datetime.timedelta(seconds=int(tack*((opt.nepoch-epoch)\
                                 *num_batch/10-idx/10))))))
         
-        torch.save(classifier.state_dict(), '{}/seg_model_{}.pth'.format(opt.outf, epoch))
+        torch.save(classifier.state_dict(), folder_path_chekp + '/chekp{}.pth'.format(epoch))
+    
+    eval_segmentation(folder_path,params) 
+    
+    params['time'] = str(datetime.timedelta(seconds=(time.time() - global_tic)))
+    with open(folder_path + '/info.json','x') as f: 
+        json.dump(params,f)
 
         
 #        for tag, value in model.named_parameters():
