@@ -4,6 +4,7 @@
 from pathlib import Path
 import torch.utils.data as data
 import torchvision.transforms as transforms
+from torch.autograd import Variable
 from pyntcloud import PyntCloud
 from pcgen.util import utils 
 import pandas as pd
@@ -47,7 +48,9 @@ class SceneDataset(data.Dataset):
         df = pd.DataFrame(current_slice) # np -> pd -> np :))
         pc_slice = np.array(df.sample(self._npoints,axis=0))
         self.logger.info('getting part {}/{}'.format(index,len(self)))
-        return (pc_slice[:,:3].astype(np.float32),pc_slice[:,3].astype(np.long))
+        points = Variable(torch.from_numpy(pc_slice[:,:3].astype(np.float32))).cuda()
+        target = Variable(torch.from_numpy(pc_slice[:,3].astype(np.long))).cuda()
+        return (points,target)
 
 
 if __name__ == '__main__':

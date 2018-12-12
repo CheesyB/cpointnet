@@ -10,6 +10,7 @@ import time
 import datetime
 import torch
 import torch.optim as optim
+from torch.autograd import Variable
 from pathlib import Path
 from torch.autograd import Variable
 from dataset.scenedataset import SceneDataset 
@@ -18,6 +19,7 @@ import torch.nn.functional as F
 from pcgen.util import tictoc # brauchen wir das?
 from pcgen.util import utils # brauchen wir das?
 from  logger import Logger 
+from dataset import renderdataset
 
 
 
@@ -44,16 +46,21 @@ def eval_segmentation(folder_path,params):
     torch.manual_seed(manualSeed)
 
     """ get dataset """
-    batch_size = 20
+    batch_size = 20 
     eval_dataset = SceneDataset(params['testset_path'],2500)
     eval_dataloader = torch.utils.data.DataLoader(eval_dataset, batch_size=batch_size,
                                               shuffle=False, num_workers=0)
     logger.info('length dataset: {}\n'
             'length training set: {}'.format(len(eval_dataset),len(eval_dataset)))
 
+    """ render dataset """
+    renderdataset.render_dataset(params['testset_path'],folder_path_eval)
+
+
     """ pararmeter """ 
     num_classes = params['number of classes']
-    num_batch = int(len(eval_dataset)/batch_size)
+    #num_batch = int(len(eval_dataset)/batch_size)
+    num_batch = 1
     logger.info('We are looking for {} classes'.format(num_classes))
 
 
@@ -67,8 +74,6 @@ def eval_segmentation(folder_path,params):
     
     optimizer = optim.SGD(classifier.parameters(), lr=0.01, momentum=0.9)
 
-    """ tensorflow hack from stackoverflow """ 
-    tf_logger = Logger(params['folder_path_tflogs'])
     
     """ for one epoch, why should we go for more:) """
 
@@ -78,9 +83,7 @@ def eval_segmentation(folder_path,params):
         tick = time.time()
         _,data = next(enumerate(eval_dataloader, 0))
         points, target = data
-        points, target = Variable(points), Variable(target)
         points = points.transpose(2,1) 
-        points, target = points.cuda(), target.cuda()
         
         """ tell classifier that its exam today"""
         classifier = classifier.eval()
@@ -95,7 +98,7 @@ def eval_segmentation(folder_path,params):
         pred_choice = pred.data.max(1)[1]
         np_pred_choice = pred_choice.cpu().detach().numpy()
         np_points = data[0].cpu().detach().numpy()
-        np_target = data[1].cpu().detach().numpy()
+        np_target = data[1].cpu().detach().numpy() - 1 
         utils.render_batch(np_points,np_pred_choice,
                 folder_path_eval)
         utils.render_batch_bool(np_points,np_pred_choice,np_target,
@@ -107,8 +110,6 @@ def eval_segmentation(folder_path,params):
 
         """ tensorflow logger """ 
         info = { 'test_loss': loss.item(), 'test_accuracy': accuracy }
-        for tag, value in info.items():
-            tf_logger.scalar_summary(tag, value, idx+1)
        
         """ console logger """
         logger.info('[{}: {}/{}] {} loss: {:2.3f} accuracy: {:2.3f}'.format(1, idx, 
@@ -116,10 +117,9 @@ def eval_segmentation(folder_path,params):
 
 if __name__ == "__main__":
     now = datetime.datetime.now()
-    folder_path = '/home/tbreu/workbench/cpointnet/out'
-    params = {'testset_path':'dataset/data/06-12_16:27_set/train_C11_S2.hd5f',
-            'folder_path_chekp':'/home/tbreu/workbench/cpointnet/seg/07.12_10:10_run/chekp',
-            'folder_path_tflogs':'/home/tbreu/workbench/cpointnet/seg/07.12_10:10_run/tflog',
+    folder_path = '/home/tbreu/workbench/cpointnet/seg/08.12_18:08_run'
+    params = {'testset_path':'dataset/data/current/test_C11_S15.hd5f',
+            'folder_path_chekp':'/home/tbreu/workbench/cpointnet/seg/08.12_18:08_run/chekp',
             'number of classes':11,}
     eval_segmentation(folder_path,params)
         

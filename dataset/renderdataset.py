@@ -11,35 +11,23 @@ from pcgen.util import utils
 
 
 
-""" This function assumes a hdf5 dataset from pcgen with the 
-    following structure:
-    /-scene0
-        |--> ds: 'cloud' (complete scene)
-        |--> ds: 'slice0' 
-        |--> ds: 'slice1' 
-        |--> ds: 'slice2' 
-        | ...
-        |--> ds: 'slicen' 
-      -scene1
-        |--> ds: 'cloud' (complete scene)
-        |--> ds: 'slice0' 
-        |--> ds: 'slice1' 
-        |--> ds: 'slice2' 
-        | ...
-        |--> ds: 'slicen' 
-        ...
-      -scenen
-      and only writes the datasets from the first group """
-
-
-def render_dataset(file_path,save_path):
+""" This function assumes a hdf5 dataset from pcgen which has a nice structure
+    and deals with references, which makes it a bit more complicated """
+                                                                                                    
+def render_dataset(file_path,save_path,scene='scene0'):
     dataset = h5py.File(file_path,'r')
-    grp = dataset['scene0']
+    grp = dataset[scene]
     for idx,_slice in enumerate(grp):
         np_slice = grp[_slice].value
-        utils.save_pointcloud_color(np_slice,save_path + str(_slice) + '.ply')
-        
-     
+        """ das ist jetzt ein dummer hack, wegen den referencen in hdf5 """
+        if isinstance(np_slice.all(),type(dataset.ref)): # mal schaun ob das so geht
+            for idx,slice_ref in enumerate(np_slice):
+                real_slice = dataset[slice_ref].value
+                assert isinstance(real_slice, np.ndarray), 'the slice is still not an np.ndarray'
+                utils.save_pointcloud_color(real_slice,save_path + '/' + 'slice' + str(idx) +'.ply')
+            return                                                                                  
+                                                                                                    
+        utils.save_pointcloud_color(np_slice,save_path + '/' + str(_slice) + '.ply')      
 
 
 

@@ -18,7 +18,6 @@ import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
-from torch.autograd import Variable
 from dataset.scenedataset import SceneDataset 
 from eval_segmentation import eval_segmentation
 from pointnet import PointNetDenseCls
@@ -30,7 +29,7 @@ from  logger import Logger
 if __name__ == "__main__":
     global_tic = time.time()
     
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser() 
     parser.add_argument('--batchSize', type=int, default=20, help='input batch size')
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=0)
     parser.add_argument('--nepoch', type=int, default=250, help='number of epochs to train for')
@@ -61,6 +60,7 @@ if __name__ == "__main__":
     params['folder_path_tflogs'] = folder_path_tflogs
     os.makedirs(folder_path_tflogs,exist_ok=True)
     
+
     folder_path_chekp = folder_path + '/chekp'
     params['folder_path_chekp'] = folder_path_chekp
     os.makedirs(folder_path_chekp,exist_ok=True)
@@ -69,12 +69,12 @@ if __name__ == "__main__":
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
 
-    params['trainset_path'] = 'dataset/hdf5/06-12_16:27_set/train_C11_S2.hd5f'
+    params['trainset_path'] = 'dataset/data/current/train_C12_S300.hd5f'
     dataset = SceneDataset(params['trainset_path'],2500)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batchSize,
                                               shuffle=True, num_workers=int(opt.workers))
     
-    params['testset_path'] = 'dataset/hdf5/06-12_16:27_set/train_C11_S2.hd5f'
+    params['testset_path'] = 'dataset/data/current/test_C12_S30.hd5f'
     test_dataset = SceneDataset(params['testset_path'],2500)
     testdataloader = torch.utils.data.DataLoader(test_dataset, batch_size=opt.batchSize,
                                               shuffle=True, num_workers=int(opt.workers))
@@ -85,7 +85,7 @@ if __name__ == "__main__":
             'length test set: {}'.format(params['len_dataset'],params['len_testset']))
 
     #num_classes = len(dataset.named_classe)
-    num_classes = 11 
+    num_classes = 12 
     params['number of classes'] = num_classes
     logger.info('We are looking for {} classes'.format(num_classes))
 
@@ -100,23 +100,23 @@ if __name__ == "__main__":
     optimizer = optim.SGD(classifier.parameters(), 
             lr=params['learning rate'], momentum =  params['momentum'] )
     classifier.cuda()
+    
 
     num_batch = int(len(dataset)/opt.batchSize)
     params['batches'] = num_batch
+    params['length dataset'] = len(dataset)
     
     tf_logger = Logger(folder_path_tflogs)
     tick = time.time()
     for epoch in range(opt.nepoch):
         for idx, data in enumerate(dataloader, 0):
             points, target = data
-            points, target = Variable(points), Variable(target)
             points = points.transpose(2,1) 
-            points, target = points.cuda(), target.cuda()   
             optimizer.zero_grad()
             classifier = classifier.train()
             pred, _ = classifier(points)
             pred = pred.view(-1, num_classes)
-            target = target.view(-1,1)[:,0] -1 #warum -1??????? (keine 0 als Label!!!)
+            target = target.view(-1,1)[:,0] -1 
             loss = F.nll_loss(pred, target)
             loss.backward()
             optimizer.step()
@@ -135,14 +135,14 @@ if __name__ == "__main__":
                 tick = time.time()
                 _,data = next(enumerate(testdataloader, 0))
                 points, target = data
-                points, target = Variable(points), Variable(target)
                 points = points.transpose(2,1) 
-                points, target = points.cuda(), target.cuda()
                 classifier = classifier.eval()
                 pred, _ = classifier(points)
                 
                 pred = pred.view(-1, num_classes)
-                target = target.view(-1,1)[:,0] - 1
+                """ minus one is important because it during training it is checked 
+                    wether the range of the classes lie between 0 and max(classes) -1 """
+                target = target.view(-1,1)[:,0]  - 1
 
                 loss = F.nll_loss(pred, target)
                 pred_choice = pred.data.max(1)[1]
@@ -161,9 +161,8 @@ if __name__ == "__main__":
                                 *num_batch/10-idx/10))))))
         
         torch.save(classifier.state_dict(), folder_path_chekp + '/chekp{}.pth'.format(epoch))
-    
+    torch.cuda.empty_cache() 
     eval_segmentation(folder_path,params) 
-    
     params['time'] = str(datetime.timedelta(seconds=(time.time() - global_tic)))
     with open(folder_path + '/info.json','x') as f: 
         json.dump(params,f)
